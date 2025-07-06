@@ -259,10 +259,6 @@ class Conversation:
         
         return msg
 
-
-
-    
-
 class Extractor:
     # 下面是一些后面处理数据会用到的工具函数
     def extract_think(output_str): # 提取<think>中间的内容
@@ -288,47 +284,33 @@ class Extractor:
         match = re.search(pattern, text, re.DOTALL)
         return match.group(1).strip() if match else ""
     
-    # def extract_answer_R1_OneVision(text):
-    #     """
-    #     从文本中提取 Answer: 后面的全部内容（兼容多单词、标点等），
-    #     支持以下格式：
-    #     - Answer: Austria and Chile
-    #     - Answer:Austria and Chile
-    #     - **Answer:** Austria and Chile
-    #     返回提取的字符串（去除首尾空格），如果未找到则返回空字符串。
-    #     """
-    #     pattern = r'(?i)(?:\*{0,2}Answer\*{0,2}:\s*)(.*?)(?=\s*\||\s*$)'  # 匹配到行尾或分隔符
-    #     match = re.search(pattern, text, re.DOTALL)  # re.DOTALL 允许跨行匹配
-    #     return match.group(1).strip() if match else ""
-    
-    
-    def extract_mathvista_answer_R1_OneVision(dataset,text): # 提取<answer>中间的内容
-        pattern = r'(?i)(?:\*{0,2}Answer\*{0,2}:\s*)(.*?)(?=\s*(?:\n|</think>|$))'
-        match = re.search(pattern, text, re.DOTALL)
-        
+    def extract_answer_special(text):
+        """
+        提取以下两种格式的答案：
+        1.提取<answer>中间的内容
+        2. Answer: xxx 或 **Answer:** xxx（原逻辑）
+        3. <answer> Final Answer:xxx </answer>（改进后支持文本和数字）
+        返回提取的内容（自动去除首尾空格），若无匹配则返回空字符串。
+        3.提取<answer>中间的内容
+        """
+        # 情况1：匹配 Answer: 或 **Answer:**
+        pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\s*)(.*?)(?=\s*(?:\n|</think>|$))'
+        # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
+        pattern2 = r'<answer>\s*Final Answer:\s*(.*?)\s*</answer>'
+        pattern3 = r'<answer>\s*(.*?)\s*</answer>'
+        # 优先尝试匹配情况2
+        match = re.search(pattern2, text, re.IGNORECASE)  # 忽略大小写
         if match:
-            answer = match.group(1).strip()
-            precision = dataset['precision']
-            answer_type = dataset['answer_type']
-            question_type = dataset['question_type']
-            
-            if question_type == 'multi_choice':
-                return answer
-            elif answer_type == 'integer':
-                try:
-                    answer = str(int(float(answer)))
-                except Exception:
-                    answer = str(answer)
-                return answer
-            elif answer_type == 'float':
-                try:
-                    answer = str(round(float(answer), int(precision)))
-                except Exception:
-                    answer = str(answer)
-                return answer
-                
-            return answer
-        return ""
+            return match.group(1).strip()
+        
+        # 如果没有匹配情况2，再尝试情况1
+        match = re.search(pattern1, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        match = re.search(pattern3, text, re.DOTALL)
+        return match.group(1).strip() if match else ""
+
     def extract_mathvista_answer(dataset,text): # 提取<answer>中间的内容
         pattern = r'<answer>\s*(.*?)\s*</answer>'
         match = re.search(pattern, text, re.DOTALL)

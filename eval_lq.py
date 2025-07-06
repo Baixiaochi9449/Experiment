@@ -33,11 +33,13 @@ DATASET_SPLIT_VAL = DATASET.split('->')[2]
 
 MODEL_NAME = MODEL_PATH.split('/')[-1]  # 输出: "R1-Onevision-7B"
 MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: "R1_Onevision_7B"
+
+
 # 加载模型
 llm = LLM(
     model=MODEL_PATH,
     tensor_parallel_size=torch.cuda.device_count(),
-    max_model_len = 8192,
+    max_model_len = 8192, 
     gpu_memory_utilization=0.9,
     limit_mm_per_prompt={"image": 1, "video": 1},
     trust_remote_code=True
@@ -69,7 +71,7 @@ for dataset_name in [DATASETNAME]:
     else:
         data = load_dataset(DATASET_PATH)[DATASET_SPLIT_VAL]
     
-    #1、处理输入的数据     
+    #1、处理输入的数据 
     QUESTION_TEMPLATE=get_question_template(COT,MODEL_NAME) # 获取问题模板
     TYPE_TEMPLATE = get_answer_template(MODEL_NAME)
     
@@ -143,14 +145,7 @@ for dataset_name in [DATASETNAME]:
             sample = data[j + i]
             result = {}
             
-            if(MODEL_NAME=='R1_Onevision_7B'):  
-                final_ans = Extractor.extract_answer_R1_OneVision(model_output)
-            
-            else:
-                if dataset_name == 'MathVista':
-                    final_ans = Extractor.extract_mathvista_answer(model_output, sample['format_question'])
-                else:
-                    final_ans = Extractor.extract_answer(model_output)
+            final_ans = Extractor.extract_answer_special(model_output)
                 
             if final_ans == "":
                 final_ans = model_output
