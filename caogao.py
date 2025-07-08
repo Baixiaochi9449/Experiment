@@ -6,12 +6,17 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 import torch
 from datasets import Dataset, DatasetDict
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer, MllamaForConditionalGeneration
 from vllm import LLM, SamplingParams
 from qwen_vl_utils import process_vision_info
 import argparse
 from datasets import load_dataset, load_from_disk
-from eval_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
+from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
+import requests
+from PIL import Image
+from torch.nn import DataParallel
+
+
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
@@ -20,7 +25,7 @@ parser.add_argument('--cot', type=str, required=True, help="COT To inference")
 parser.add_argument('--savepath', type=str, required=True, help="Path To Save")
 parser.add_argument('--tips', type=str, required=False, default='default', help="tips")
 args = parser.parse_args()
-BSZ = 64
+BSZ = 1
 
 MODEL_PATH = args.model_path
 DATASET = args.dataset
@@ -36,22 +41,23 @@ MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: "R1_Onevision_7B"
 
 
 # 加载模型
-llm = LLM(
-    model=MODEL_PATH,
-    tensor_parallel_size=torch.cuda.device_count(),
-    max_model_len = 8192, 
-    gpu_memory_utilization=0.9,
-    limit_mm_per_prompt={"image": 1, "video": 1},
-    trust_remote_code=True
+
+model = MllamaForConditionalGeneration.from_pretrained(
+    MODEL_PATH,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
 )
 
-# 推理时的采样超参数设置(默认下面的设置即可)
+# if torch.cuda.device_count() > 1:
+#     model = DataParallel(model, device_ids=[0, 1])  # 显式指定设备
+
 sampling_params = SamplingParams(
-    temperature=0.1,
-    top_p=0.001,
-    max_tokens=4096,# 最多输出token数量
-    stop_token_ids=[],
-)
+        temperature=0.1,
+        top_p=0.001,
+        max_tokens=4096,# 最多输出token数量
+        stop_token_ids=[],
+    )
+
 
 # 加载tokenizer 和 processor
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
@@ -77,13 +83,18 @@ for dataset_name in [DATASETNAME]:
     
     #填入对话格式模板
     make_conversation_cot_image=Conversation.get_conversation_fuchtion(dataset_name) # 获取对话格式模板函数
+    data = data.map(make_conversation_cot_image)   #存储了所有用到的数据
     
-    data = data.map(make_conversation_cot_image) 
+    
     messages = []
+    all_urls=[]
     for x in tqdm(data): # 构造输入数据
         msg = get_data_with_templete(dataset_name,x,QUESTION_TEMPLATE,TYPE_TEMPLATE)
         messages.append(msg) #变为role content的格式
         
+        all_urls.append(x['url']) # 存储所有的url地址
+        
+    
     final_output = []
     start_idx = 0
     if os.path.exists(OUTPUT_PATH):    #上一次没测完的，可以接着续写
@@ -101,51 +112,57 @@ for dataset_name in [DATASETNAME]:
     mean_mra = []
     for i in tqdm(range(start_idx, len(messages), BSZ), desc="Processing batches"):
         batch_messages = messages[i:i + BSZ] 
+        batch_urls= all_urls[i:i + BSZ]  # 获取当前batch的url地址
         
-        prompts = [processor.apply_chat_template(msg, tokenize=False, add_generation_prompt=True) for msg in batch_messages]    #变为<>
+        image_inputs = [Image.open(img_path) for img_path in batch_urls]
+        text_inputs = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in batch_messages]  
         
-        try:# 解析batch数据里面的图像/视频
-            image_inputs, video_inputs, video_kwargs = process_vision_info(batch_messages, return_video_kwargs=True)
+        try:
+            # inputs_batch = [] # 构造输入到llm之前的input数据（一个batch）
             
-            image_idx = 0
-            video_idx = 0
-
-            llm_inputs = [] # 构造输入到llm之前的input数据（一个batch）
-
-            for idx, prompt in enumerate(prompts): # 遍历prompts
-                mm_type = batch_messages[idx][0]['content'][0]['type'] # 当前输入多模态信息的类型 video or image
-                sample_mm_data = {} # 构造最终的视频输入数据
-                sample_video_kw = {}
-                if mm_type == 'image':
-                    sample_mm_data["image"] = image_inputs[image_idx]
-                    image_idx += 1
-                elif mm_type == 'video':
-                    sample_mm_data["video"] = video_inputs[video_idx] # 得到视频输入数据放入sample_mm_data
-                    for key, value in video_kwargs.items(): # 将视频信息放入sample_mm_data
-                        sample_video_kw[key] = value[video_idx]
-                    video_idx += 1
-                        
-                llm_inputs.append({ # 加入到llm_inputs中
-                    "prompt": prompt,
-                    "multi_modal_data": sample_mm_data,
-                    "mm_processor_kwargs": sample_video_kw,
-                })
-                
-            #最终输入到模型中的数据为 llm_inputs
+            # for image, input_text in zip(image_inputs, text_inputs):
+            #     inputs = processor(
+            #                         image,
+            #                         input_text,
+            #                         add_special_tokens=False,
+            #                         return_tensors="pt"
+            #                     ).to(model.device)
+            #     inputs_batch.append(inputs) # 将每个样本的输入数据放入inputs_batch
+            inputs_batch = processor(
+                text=text_inputs,
+                images=image_inputs,
+                padding=True,
+                return_tensors="pt"
+            ).to(model.device)
+        
             #（2）输入给模型
-            outputs = llm.generate(llm_inputs, sampling_params=sampling_params)
-            batch_output_text = [out.outputs[0].text for out in outputs] # 记录一个batch推理之后的输出答案
+            outputs = model.generate(**inputs_batch, 
+                                     temperature=sampling_params.temperature,
+                                     top_p=sampling_params.top_p,
+                                     max_new_tokens=sampling_params.max_tokens,
+                                     )
+            # batch_output_text=[]
+            # for out in outputs:
+            #     out_text=processor.decode(out[0])
+            #     batch_output_text.append(out_text)  # 记录一个batch推理之后的输出答案
+            batch_output_text = processor.batch_decode(outputs, skip_special_tokens=True)
             
+            print("==============output================:", batch_output_text[:10])  # 打印前10个输出结果
+
         except Exception as e:
-            print(e,'error:', data[i]['path'])
+            print(e,'error:', data[i]['q_id'])
             batch_output_text = ['<answer>error</answer>'] * BSZ
             
         #（3）处理模型输出的结果
-        for j, model_output in enumerate(batch_output_text):# sample是原始数据集
+        for j, answer in enumerate(batch_output_text):# sample是原始数据集
+            model_output = answer.split('assistant\n\n')[1]
             sample = data[j + i]
             result = {}
-            
-            final_ans = Extractor.extract_answer_special(model_output)
+    
+            if(dataset_name == 'MathVista'):
+                final_ans = Extractor.extract_mathvista_answer(sample, model_output)
+            else:
+                final_ans = Extractor.extract_answer_special(model_output)
                 
             if final_ans == "":
                 final_ans = model_output

@@ -16,12 +16,7 @@ def get_question_template(COT,MODEL_NAME):
     if COT == 'TA':
         if MODEL_NAME=='R1_Onevision_7B':
             QUESTION_TEMPLATE = (
-                "{Question}\n"
-                "Please think about this question as if you were a human pondering deeply. "
-                "Engage in an internal dialogue using expressions such as 'let me think', 'wait', 'Hmm', 'oh, I see', 'let's break it down', etc, or other natural language thought expressions "
-                "It's encouraged to include self-reflection or verification in the reasoning process. "
-                "Provide your detailed reasoning between the <think> </think> tags."
-                "Please ensure your final answer is provided in the exact format: Answer:[your_answer]"
+                "{Question}  Output the thinking process in <think> </think> and final answer (number) in <answer> </answer> tags."
             )
         else:
             QUESTION_TEMPLATE = (
@@ -56,15 +51,14 @@ def get_question_template(COT,MODEL_NAME):
 
 def get_answer_template(MODEL_NAME):
     # 回答问题模板
-    if MODEL_NAME=='R1_Onevision_7B':
+    if MODEL_NAME == 'R1_Onevision-7B':
         TYPE_TEMPLATE = {
-            "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) in the format 'Answer:[your_answer]'. Example: 'Answer:A'",
-            "numerical": " Please provide the numerical value (e.g., 42 or 3.14) in the format 'Answer:[your_answer]'. Example: 'Answer:42'.",
-            "OCR": " Please transcribe text from the image/video clearly and provide your text answer in the format 'Answer:[your_answer]'. Example: 'Answer:Apple'.",
-            "free-form": " Please provide your text answer in the format 'Answer:[your_answer]'. Example: 'Answer:Yes,it is....'.",
-            "regression": " Please provide the numerical value (e.g., 42 or 3.14) in the format 'Answer:[your_answer]'. Example: 'Answer:42'"
+            "multiple choice": "",
+            "numerical": "",
+            "OCR":"",
+            "free-form": "",
+            "regression": ""
         }
-        
     else:
         TYPE_TEMPLATE = {
             "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) within the <answer> </answer> tags.",
@@ -124,6 +118,7 @@ class Conversation:
             return Conversation.make_conversation_image_and_video
     
     def make_conversation_MathVista(example):
+        
         question = example['question']
         answer = example['answer']
         ans_type = example['answer_type']
@@ -312,11 +307,10 @@ class Extractor:
         return match.group(1).strip() if match else ""
 
     def extract_mathvista_answer(dataset,text): # 提取<answer>中间的内容
-        pattern = r'<answer>\s*(.*?)\s*</answer>'
-        match = re.search(pattern, text, re.DOTALL)
-        
-        if match:
-            answer = match.group(1).strip()
+        answer= Extractor.extract_answer_special(text)
+        if(answer == ""): 
+            return ""
+        else :
             precision = dataset['precision']
             answer_type = dataset['answer_type']
             question_type = dataset['question_type']
@@ -337,7 +331,6 @@ class Extractor:
                 return answer
                 
             return answer
-        return ""
 
     def normalize_number(num_str): # 将字符串格式的数字转换为float
         try:
