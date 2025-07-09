@@ -6,22 +6,25 @@ from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
 from rouge_score import rouge_scorer
 import torch
 from datasets import Dataset, DatasetDict
-from transformers import AutoProcessor, AutoTokenizer
+from transformers import AutoProcessor, AutoTokenizer,AutoModelForCausalLM
 from vllm import LLM, SamplingParams
 from qwen_vl_utils import process_vision_info
 import argparse
 from datasets import load_dataset, load_from_disk
-from eval_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
+from qwen_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
+import warnings
+warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
 parser.add_argument('--dataset', type=str, required=True, help="Path to the Dataset")
 parser.add_argument('--cot', type=str, required=True, help="COT To inference")
 parser.add_argument('--savepath', type=str, required=True, help="Path To Save")
+parser.add_argument('--batchsize', type=int, required=True, default=1, help="Batch size for evaluation")
 parser.add_argument('--tips', type=str, required=False, default='default', help="tips")
 args = parser.parse_args()
-BSZ = 64
 
+BSZ = args.batchsize
 MODEL_PATH = args.model_path
 DATASET = args.dataset
 COT = args.cot
@@ -33,9 +36,9 @@ DATASET_SPLIT_VAL = DATASET.split('->')[2]
 
 MODEL_NAME = MODEL_PATH.split('/')[-1]  # 输出: "R1-Onevision-7B"
 MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: "R1_Onevision_7B"
-
-
+print("MODEL_NAME",MODEL_NAME)
 # 加载模型
+
 llm = LLM(
     model=MODEL_PATH,
     tensor_parallel_size=torch.cuda.device_count(),
@@ -74,6 +77,8 @@ for dataset_name in [DATASETNAME]:
     #1、处理输入的数据 
     QUESTION_TEMPLATE=get_question_template(COT,MODEL_NAME) # 获取问题模板
     TYPE_TEMPLATE = get_answer_template(MODEL_NAME)
+    print("QUESTION_TEMPLATE:",QUESTION_TEMPLATE)
+    print(" TYPE_TEMPLATE", TYPE_TEMPLATE)
     
     #填入对话格式模板
     make_conversation_cot_image=Conversation.get_conversation_fuchtion(dataset_name) # 获取对话格式模板函数

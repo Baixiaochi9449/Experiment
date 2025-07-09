@@ -15,16 +15,21 @@ from llama_tools import get_question_template,get_answer_template,get_data_with_
 import requests
 from PIL import Image
 from torch.nn import DataParallel
+from torchvision.transforms import Compose, Resize
+import warnings
+warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
 parser.add_argument('--dataset', type=str, required=True, help="Path to the Dataset")
 parser.add_argument('--cot', type=str, required=True, help="COT To inference")
 parser.add_argument('--savepath', type=str, required=True, help="Path To Save")
+parser.add_argument('--batchsize', type=int, required=True, default=1, help="Batch size for evaluation")
 parser.add_argument('--tips', type=str, required=False, default='default', help="tips")
 args = parser.parse_args()
-BSZ = 2   #11B的模型 2已经是极限了
 
+
+BSZ = args.batchsize   #11B的模型 2已经是极限了
 MODEL_PATH = args.model_path
 DATASET = args.dataset
 COT = args.cot
@@ -43,18 +48,24 @@ model = MllamaForConditionalGeneration.from_pretrained(
     torch_dtype=torch.bfloat16,
     device_map="auto",
 )
+model.eval()  # 设置模型为评估模式
 
-sampling_params = SamplingParams(
-        temperature=0.1,
-        top_p=0.001,
-        max_tokens=1024,# 最多输出token数量
-        stop_token_ids=[],
-    )
 
+if(MODEL_NAME=='Llama_3.2V_11B_cot'):
+    kwargs = dict(do_sample=True, 
+                 max_new_tokens=2048, 
+                 temperature=0.6, 
+                 top_p=0.9)
+else:
+    kwargs = dict(do_sample=True, 
+                max_new_tokens=4096, 
+                temperature=0.1, 
+                top_p=0.001)
 processor = AutoProcessor.from_pretrained(MODEL_PATH)
 tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
 tokenizer.padding_side = "left"
 processor.tokenizer = tokenizer
+
 
 for dataset_name in [DATASETNAME]:
     # 测试结果保存地址和eval数据集目录地址
@@ -101,26 +112,35 @@ for dataset_name in [DATASETNAME]:
     for i in tqdm(range(start_idx, len(messages), BSZ), desc="Processing batches"):
         batch_messages = messages[i:i + BSZ] 
         batch_urls= all_urls[i:i + BSZ]  # 获取当前batch的url地址
-        if(dataset_name == 'MathVista'):
+        
+        #（1）处理图片输入
+        # transform = Compose([
+        #     Resize((336, 336)),  # 调整为模型接受的尺寸
+        #     lambda x: x.convert("RGB")
+        # ])        
+        # if(dataset_name == 'MathVista'): 
+        #     image_inputs = [transform(Image.open(img_path)) for img_path in batch_urls]
+        # else:
+        #     image_inputs = [transform(img_path) for img_path in batch_urls]
+        if(dataset_name == 'MathVista'): 
             image_inputs = [Image.open(img_path) for img_path in batch_urls]
         else:
-            image_inputs = batch_urls 
+            image_inputs = batch_urls
+        #（2）处理文本输入
         text_inputs = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in batch_messages]  
         
         try:
-            inputs_batch = processor(
+            inputs_batch = processor(    
                 text=text_inputs,
                 images=image_inputs,
-                padding=True,
+                # padding=True,
+                padding="longest",
                 return_tensors="pt"
             ).to(model.device)
         
             outputs = model.generate(
                 **inputs_batch, 
-                do_sample=True,
-                temperature=sampling_params.temperature,
-                top_p=sampling_params.top_p,
-                max_new_tokens=sampling_params.max_tokens,
+                **kwargs
                 )
             
             batch_output_text = processor.batch_decode(outputs, skip_special_tokens=True)

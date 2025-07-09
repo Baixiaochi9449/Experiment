@@ -14,7 +14,7 @@ from datasets import load_dataset, load_from_disk
  
 def get_question_template(COT,MODEL_NAME):
     if COT == 'TA':
-        if MODEL_NAME=='R1_Onevision_7B':
+        if MODEL_NAME=='.....':
             QUESTION_TEMPLATE = (
                 "{Question}  Output the thinking process in <think> </think> and final answer (number) in <answer> </answer> tags."
             )
@@ -51,7 +51,7 @@ def get_question_template(COT,MODEL_NAME):
 
 def get_answer_template(MODEL_NAME):
     # 回答问题模板
-    if MODEL_NAME == 'R1_Onevision-7B':
+    if MODEL_NAME == '......':
         TYPE_TEMPLATE = {
             "multiple choice": "",
             "numerical": "",
@@ -269,16 +269,7 @@ class Extractor:
         if match:
             return match.group(1).strip()
         return ""
-    
-    def extract_answer_R1_OneVision(text):
-        """
-        提取 Answer: 或 **Answer:** 后的内容，直到遇到换行符 \n 或 HTML 标签（如 </think>）。
-        返回提取的字符串（自动去除首尾空格），若无匹配则返回空字符串。
-        """
-        pattern = r'(?i)(?:\*{0,2}Answer\*{0,2}:\s*)(.*?)(?=\s*(?:\n|</think>|$))'
-        match = re.search(pattern, text, re.DOTALL)
-        return match.group(1).strip() if match else ""
-    
+
     def extract_answer_special(text):
         """
         提取以下两种格式的答案：
@@ -289,7 +280,8 @@ class Extractor:
         3.提取<answer>中间的内容
         """
         # 情况1：匹配 Answer: 或 **Answer:**
-        pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\s*)(.*?)(?=\s*(?:\n|</think>|$))'
+       
+        pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\*{0,2}\s*)(.*?)(?=\s*(?:\n|</think>|$))'
         # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
         pattern2 = r'<answer>\s*Final Answer:\s*(.*?)\s*</answer>'
         pattern3 = r'<answer>\s*(.*?)\s*</answer>'
