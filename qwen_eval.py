@@ -42,7 +42,7 @@ print("MODEL_NAME",MODEL_NAME)
 llm = LLM(
     model=MODEL_PATH,
     tensor_parallel_size=torch.cuda.device_count(),
-    max_model_len = 8192, 
+    max_model_len = 8192,   #8192
     gpu_memory_utilization=0.9,
     limit_mm_per_prompt={"image": 1, "video": 1},
     trust_remote_code=True
@@ -131,14 +131,20 @@ for dataset_name in [DATASETNAME]:
                     for key, value in video_kwargs.items(): # 将视频信息放入sample_mm_data
                         sample_video_kw[key] = value[video_idx]
                     video_idx += 1
-                        
-                llm_inputs.append({ # 加入到llm_inputs中
-                    "prompt": prompt,
-                    "multi_modal_data": sample_mm_data,
-                    "mm_processor_kwargs": sample_video_kw,
-                })
                 
-            #最终输入到模型中的数据为 llm_inputs
+                if(MODEL_NAME=="R1_VL_7B"):
+                    llm_inputs.append({ # 加入到llm_inputs中
+                        "prompt": prompt,
+                        "multi_modal_data": sample_mm_data,
+                        # "mm_processor_kwargs": sample_video_kw,
+                    })
+                else:
+                    llm_inputs.append({ # 加入到llm_inputs中
+                        "prompt": prompt,
+                        "multi_modal_data": sample_mm_data,
+                        "mm_processor_kwargs": sample_video_kw,
+                    })                    
+                
             #（2）输入给模型
             outputs = llm.generate(llm_inputs, sampling_params=sampling_params)
             batch_output_text = [out.outputs[0].text for out in outputs] # 记录一个batch推理之后的输出答案
@@ -159,14 +165,20 @@ for dataset_name in [DATASETNAME]:
                 
             if final_ans == "":
                 final_ans = model_output
-            
+            else:   
+                if(dataset_name in {'MMBench','tempcompass'}):
+                    final_ans = final_ans[0]
+                    
+            q_type = sample.get("problem_type", "")
+            if(dataset_name in {"mmvu","videommmu"} and q_type=="multiple choice"):
+                final_ans = final_ans[0]
+                
             result['question_id'] = sample['q_id']
             result['format_question'] = sample['format_question']
             result["output"] = model_output # 记录输出
             result["prediction"] = final_ans # 记录预测
             result["solution"] = sample["solution"]
             
-            q_type = sample.get("problem_type", "")
             result["reward"] = Extractor.reward_fn(sample, final_ans, q_type) # 记录准确率奖励分数
             result['correct'] = True if result["reward"]==1.0 else False
             

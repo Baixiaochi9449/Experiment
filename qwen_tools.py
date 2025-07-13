@@ -18,6 +18,22 @@ def get_question_template(COT,MODEL_NAME):
             QUESTION_TEMPLATE = (
                 "{Question}  Output the thinking process in <think> </think> and final answer (number) in <answer> </answer> tags."
             )
+        if MODEL_NAME=='R1_VL_7B':
+            QUESTION_TEMPLATE = """Generate an image description based on the question.
+            Then, provide a rationale to analyze the question.
+            Next, generate a step-by-step reasoning process to solve the problem. Ensure the steps are logical and concise.
+            Finally, provide a concise summary of the final answer in the following format: 'The final answer is: xxx.
+
+            Format your response with the following sections, separated by ###:
+            ### Image Description:
+            ### Rationales:
+            ### Let's think step by step.
+            ### Step 1:
+            ### Step 2:
+            ...
+            ### The final answer is: 
+
+            {Question}"""
         else:
             QUESTION_TEMPLATE = (
                 "{Question}\n"
@@ -51,7 +67,7 @@ def get_question_template(COT,MODEL_NAME):
 
 def get_answer_template(MODEL_NAME):
     # 回答问题模板
-    if MODEL_NAME == '......':
+    if MODEL_NAME == 'R1_VL_7B':
         TYPE_TEMPLATE = {
             "multiple choice": "",
             "numerical": "",
@@ -249,7 +265,7 @@ class Conversation:
         msg ={
             "format_question":question,
             "q_id": example['problem_id'],
-            "image": '/home/gwj/omni-video-r1/data/eval_data' + example['path'][1:]
+            "image": '/home/gwj/omni-video-r1/data/eval_data' + example['path'][1:],
             }
         
         return msg
@@ -282,10 +298,15 @@ class Extractor:
         # 情况1：匹配 Answer: 或 **Answer:**
        
         pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\*{0,2}\s*)(.*?)(?=\s*(?:\n|</think>|$))'
+        pattern4 = r'The final answer is:\s*(.*?)(?=\n\n|$)'
         # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
         pattern2 = r'<answer>\s*Final Answer:\s*(.*?)\s*</answer>'
         pattern3 = r'<answer>\s*(.*?)\s*</answer>'
         # 优先尝试匹配情况2
+        match = re.search(pattern4,text,re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
         match = re.search(pattern2, text, re.IGNORECASE)  # 忽略大小写
         if match:
             return match.group(1).strip()

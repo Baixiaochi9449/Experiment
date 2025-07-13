@@ -27,6 +27,14 @@ def get_question_template(COT,MODEL_NAME):
                 "Step 6: Provide the final answer, starting with \"FINAL ANSWER:\" and using as few words as possible, simply stating the number or data point requested. \n\n "
                 "The question is: {Question}<cot_start>Let's think step by step."
             )
+        if MODEL_NAME == 'Llama_3.2_11B_Vision_Instruct':  
+            QUESTION_TEMPLATE = (
+                "{Question}\n"
+                "Please think about this question as if you were a human pondering deeply. "
+                "Engage in an internal dialogue using expressions such as 'let me think', 'wait', 'Hmm', 'oh, I see', 'let's break it down', etc, or other natural language thought expressions "
+                "It's encouraged to include self-reflection or verification in the reasoning process. "
+                "Give your final answer in the format:'Answer:[your answer]'"
+                )            
         else:
             QUESTION_TEMPLATE = (
                 "{Question}\n"
@@ -60,7 +68,6 @@ def get_question_template(COT,MODEL_NAME):
 
 def get_answer_template(MODEL_NAME):
     if MODEL_NAME == 'Llama_3.2V_11B_cot':
-        # 回答问题模板
         TYPE_TEMPLATE = {
             "multiple choice":"",
             "numerical":"",
@@ -68,7 +75,14 @@ def get_answer_template(MODEL_NAME):
             "free-form":"",
             "regression":""
         }
-    # 回答问题模板
+    if MODEL_NAME == 'Llama_3.2_11B_Vision_Instruct':  
+        TYPE_TEMPLATE = {
+            "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) in the format:'Answer:[your answer]'. Example: 'Answer: D' ",
+            "numerical": " Please provide the numerical value (e.g., 42 or 3.14) in the format:'Answer:[your answer]'. Example: 'Answer: 42'",
+            "OCR": " Please transcribe text from the image/video clearly and provide your text answer in the format:'Answer:[your answer]'. Example: 'Answer: Apple'",
+            "free-form": " Please provide your text answer in the format:'Answer:[your answer]'.",
+            "regression": " Please provide the numerical value (e.g., 42 or 3.14) in the format:'Answer:[your answer]'. Example: 'Answer: 3.14'"
+        }       
     else:
         TYPE_TEMPLATE = {
             "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) within the <answer> </answer> tags.",

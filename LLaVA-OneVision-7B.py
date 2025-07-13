@@ -1,5 +1,14 @@
-import multiprocessing
-multiprocessing.set_start_method('spawn')  # 必须在所有其他导入前执行
+# pip install git+https://github.com/LLaVA-VL/LLaVA-NeXT.git
+from llava.model.builder import load_pretrained_model
+from llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token
+from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, IGNORE_INDEX
+from llava.conversation import conv_templates, SeparatorStyle
+
+from PIL import Image
+import requests
+import copy
+import torch
+
 import os
 import json
 import re
@@ -10,21 +19,29 @@ import torch
 from datasets import Dataset, DatasetDict
 from transformers import AutoProcessor, AutoTokenizer, MllamaForConditionalGeneration
 from vllm import LLM, SamplingParams
+from qwen_vl_utils import process_vision_info
 import argparse
 from datasets import load_dataset, load_from_disk
 from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
 import requests
 from PIL import Image
+from torch.nn import DataParallel
+from torchvision.transforms import Compose, Resize
+import warnings
+warnings.filterwarnings("ignore")
+
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
 parser.add_argument('--dataset', type=str, required=True, help="Path to the Dataset")
 parser.add_argument('--cot', type=str, required=True, help="COT To inference")
 parser.add_argument('--savepath', type=str, required=True, help="Path To Save")
+parser.add_argument('--batchsize', type=int, required=True, default=1, help="Batch size for evaluation")
 parser.add_argument('--tips', type=str, required=False, default='default', help="tips")
 args = parser.parse_args()
-BSZ = 1
 
+
+BSZ = args.batchsize   #11B的模型 2已经是极限了
 MODEL_PATH = args.model_path
 DATASET = args.dataset
 COT = args.cot
@@ -35,27 +52,15 @@ DATASETNAME = DATASET.split('->')[1]
 DATASET_SPLIT_VAL = DATASET.split('->')[2]
 
 MODEL_NAME = MODEL_PATH.split('/')[-1]  # 输出: "R1-Onevision-7B"
-MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: "R1_Onevision_7B"
+MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: 
+print("MODEL_NAME",MODEL_NAME)
 
-llm = LLM(
-    model=MODEL_PATH,
-    tensor_parallel_size=torch.cuda.device_count(),
-    max_model_len = 256, 
-    gpu_memory_utilization=0.9,
-    limit_mm_per_prompt={"image": 1, "video": 1},
-    trust_remote_code=True
-)
-sampling_params = SamplingParams(
-        temperature=0.1,
-        top_p=0.001,
-        max_tokens=256,# 最多输出token数量
-        stop_token_ids=[],
-    )
+#加载模型
+model_name = "llava_qwen"
+device = "cuda"
+tokenizer, model, image_processor, max_length = load_pretrained_model(MODEL_PATH, None, model_name, device_map='auto')  
 
-processor = AutoProcessor.from_pretrained(MODEL_PATH)
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-tokenizer.padding_side = "left"
-processor.tokenizer = tokenizer
+model.eval()
 
 for dataset_name in [DATASETNAME]:
     # 测试结果保存地址和eval数据集目录地址
@@ -71,17 +76,15 @@ for dataset_name in [DATASETNAME]:
     #1、处理输入的数据 
     QUESTION_TEMPLATE=get_question_template(COT,MODEL_NAME) # 获取问题模板
     TYPE_TEMPLATE = get_answer_template(MODEL_NAME)
+    print("QUESTION_TEMPLATE:",QUESTION_TEMPLATE)
+    print(" TYPE_TEMPLATE", TYPE_TEMPLATE)   
     
-    #填入对话格式模板
     make_conversation_cot_image=Conversation.get_conversation_fuchtion(dataset_name) # 获取对话格式模板函数
     data = data.map(make_conversation_cot_image)   #存储了所有用到的数据
-    
-    messages = []
+
     all_urls=[]
     for x in tqdm(data): # 构造输入数据
-        msg = get_data_with_templete(dataset_name,x,QUESTION_TEMPLATE,TYPE_TEMPLATE)
-        messages.append(msg) #变为role content的格式
-        all_urls.append(x['url']) # 存储所有的url地址
+        all_urls.append(x['url']) # 存储所有的url地址   #可能是地址，也可能是已经加载的图片
         
     final_output = []
     start_idx = 0
@@ -95,41 +98,54 @@ for dataset_name in [DATASETNAME]:
         except Exception as e:
             print(f"Error reading existing output file: {e}")
 
-    #2、开始处理数据
+
     mean_acc = []
     mean_mra = []
-    for i in tqdm(range(start_idx, len(messages), BSZ), desc="Processing batches"):
-        batch_messages = messages[i:i + BSZ] 
+    for i in tqdm(range(start_idx, len(data), BSZ), desc="Processing batches"):
+        batch_data = data[i:i + BSZ] 
         batch_urls= all_urls[i:i + BSZ]  # 获取当前batch的url地址
         
-        if(dataset_name == 'MathVista'):
+        if(dataset_name == 'MathVista'): 
             image_inputs = [Image.open(img_path) for img_path in batch_urls]
         else:
-            image_inputs = batch_urls         
-            
-        text_inputs = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in batch_messages]  
+            image_inputs = batch_urls
         
         try:
-            inputs_batch = processor(
-                text=text_inputs,
-                images=image_inputs,
-                padding=True,
-                return_tensors="pt"
-            ).to(llm.device)
-        
-            outputs = llm.generate(
-                **inputs_batch, sampling_params=sampling_params
-                )
+            #处理图片
+            image_tensor = process_images(image_inputs, image_processor, model.config)
+            image_tensor = [_image.to(dtype=torch.float16, device=device) for _image in image_tensor]
+
             
-            batch_output_text = processor.batch_decode(outputs, skip_special_tokens=True)
+            conv_template = "qwen_1_5"  # Make sure you use correct chat template for different models
+            question = DEFAULT_IMAGE_TOKEN + data[i]["format_question"]
+            conv = copy.deepcopy(conv_templates[conv_template])
+            conv.append_message(conv.roles[0], question)
+            conv.append_message(conv.roles[1], None)
+            prompt_question = conv.get_prompt()
+
+            input_ids = tokenizer_image_token(prompt_question, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt").unsqueeze(0).to(device)
+            image_sizes = [image_inputs[0].size]
+                
+            outputs = model.generate(
+                input_ids,
+                images=image_tensor,
+                image_sizes=image_sizes,
+                do_sample=False,
+                temperature=0,
+                max_new_tokens=4096,
+            )
+            
+            
+            batch_output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
             
             print("==============output================:", batch_output_text[:10])  # 打印前10个输出结果
 
         except Exception as e:
             print(e,'error:', data[i]['q_id'])
             batch_output_text = ['<answer>error</answer>'] * BSZ
-            
-        #（3）处理模型输出的结果
+
+
+
         for j, answer in enumerate(batch_output_text):# sample是原始数据集
             model_output = answer.split('assistant\n\n')[1]
             sample = data[j + i]
@@ -139,9 +155,12 @@ for dataset_name in [DATASETNAME]:
                 final_ans = Extractor.extract_mathvista_answer(sample, model_output)
             else:
                 final_ans = Extractor.extract_answer_special(model_output)
-                
+                              
             if final_ans == "":
                 final_ans = model_output
+            else:   
+                if(dataset_name=='MMBench'):
+                    final_ans = final_ans[0]
             
             result['question_id'] = sample['q_id']
             result['format_question'] = sample['format_question']

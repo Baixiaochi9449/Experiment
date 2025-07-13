@@ -113,15 +113,6 @@ for dataset_name in [DATASETNAME]:
         batch_messages = messages[i:i + BSZ] 
         batch_urls= all_urls[i:i + BSZ]  # 获取当前batch的url地址
         
-        #（1）处理图片输入
-        # transform = Compose([
-        #     Resize((336, 336)),  # 调整为模型接受的尺寸
-        #     lambda x: x.convert("RGB")
-        # ])        
-        # if(dataset_name == 'MathVista'): 
-        #     image_inputs = [transform(Image.open(img_path)) for img_path in batch_urls]
-        # else:
-        #     image_inputs = [transform(img_path) for img_path in batch_urls]
         if(dataset_name == 'MathVista'): 
             image_inputs = [Image.open(img_path) for img_path in batch_urls]
         else:
@@ -161,9 +152,12 @@ for dataset_name in [DATASETNAME]:
                 final_ans = Extractor.extract_mathvista_answer(sample, model_output)
             else:
                 final_ans = Extractor.extract_answer_special(model_output)
-                
+                              
             if final_ans == "":
                 final_ans = model_output
+            else:   
+                if(dataset_name=='MMBench'):
+                    final_ans = final_ans[0]
             
             result['question_id'] = sample['q_id']
             result['format_question'] = sample['format_question']
