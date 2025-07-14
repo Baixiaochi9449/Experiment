@@ -178,3 +178,16 @@ R1-VL-7B_mmvu:
         --savepath /home/gwj/omni-video-r1/luqi/eval_result \
         --batchsize 64 \
         --tips the_third
+
+LLava_onevision_7B_MathVista:
+    export DECORD_EOF_RETRY_MAX=20480
+    export CUDA_VISIBLE_DEVICES=7
+    python /home/gwj/omni-video-r1/luqi/Experiment/LLaVA-OneVision-7B.py \
+        --model_path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --dataset "/home/gwj/omni-video-r1/data/eval_data/MathVista->MathVista->testmini" \
+        --cot TA \
+        --savepath /home/gwj/omni-video-r1/luqi/eval_result \
+        --batchsize 1 \
+        --tips the_second
+
+
