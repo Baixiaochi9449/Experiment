@@ -3,31 +3,21 @@ from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, IGNORE_INDEX
 from llava.conversation import conv_templates, SeparatorStyle
-
 from PIL import Image
-import requests
 import copy
 import torch
-
 import os
 import json
-import re
 from tqdm import tqdm
-from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
-from rouge_score import rouge_scorer
 import torch
-from datasets import Dataset, DatasetDict
-from transformers import AutoProcessor, AutoTokenizer, MllamaForConditionalGeneration
-from vllm import LLM, SamplingParams
-from qwen_vl_utils import process_vision_info
+from datasets import Dataset
 import argparse
-from datasets import load_dataset, load_from_disk
-from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
-import requests
+from datasets import load_dataset
+from llama_tools import get_question_template,get_answer_template
 from PIL import Image
 import warnings
 warnings.filterwarnings("ignore")
-
+from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
@@ -56,36 +46,9 @@ print("MODEL_NAME",MODEL_NAME)
 #加载模型
 model_name = "llava_qwen"
 device = "cuda"
- 
-kwargs={"device_map": 'auto',
-        "torch_dtype":torch.float16
-    }
-#tokrn
-tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
-model = LlavaQwenForCausalLM.from_pretrained(MODEL_PATH, low_cpu_mem_usage=True, attn_implementation="flash_attention_2", **kwargs)
-mm_use_im_start_end = getattr(model.config, "mm_use_im_start_end", False)
-mm_use_im_patch_token = getattr(model.config, "mm_use_im_patch_token", True)
-if mm_use_im_patch_token:
-    tokenizer.add_tokens([DEFAULT_IMAGE_PATCH_TOKEN], special_tokens=True)
-if mm_use_im_start_end:
-    tokenizer.add_tokens([DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN], special_tokens=True)
-model.resize_token_embeddings(len(tokenizer))
 
-vision_tower = model.get_vision_tower()
-if not vision_tower.is_loaded:
-    vision_tower.load_model(device_map=device_map)
-if device_map != "auto":
-    vision_tower.to(device="cuda", dtype=torch.float16)
-image_processor = vision_tower.image_processor
-
-if hasattr(model.config, "max_sequence_length"):
-    context_len = model.config.max_sequence_length
-elif hasattr(model.config, "max_position_embeddings"):
-    context_len = model.config.max_position_embeddings
-elif hasattr(model.config, "tokenizer_model_max_length"):
-    context_len = model.config.tokenizer_model_max_length
-else:
-    context_len = 2048
+device_map = "auto"
+tokenizer, model, image_processor, max_length = load_pretrained_model(MODEL_PATH, None, model_name, device_map=device_map)  # Add any other thing you want to pass in llava_model_args
 
 model.eval()
 
@@ -128,30 +91,28 @@ for dataset_name in [DATASETNAME]:
 
     mean_acc = []
     mean_mra = []
-    for i in tqdm(range(start_idx, len(data), BSZ), desc="Processing batches"):
-        batch_data = data[i:i + BSZ] 
-        batch_urls= all_urls[i:i + BSZ]  # 获取当前batch的url地址
-        
+    
+    for i,(text_data,url) in enumerate(zip(data,all_urls)):
         if(dataset_name == 'MathVista'): 
-            image_inputs = [Image.open(img_path) for img_path in batch_urls]
+            image_inputs = Image.open(url)
         else:
-            image_inputs = batch_urls
+            image_inputs = url  #已经处理过的
         
         try:
             #处理图片
-            image_tensor = process_images(image_inputs, image_processor, model.config)
+            image_tensor = process_images([image_inputs], image_processor, model.config)
             image_tensor = [_image.to(dtype=torch.float16, device=device) for _image in image_tensor]
 
-            
-            conv_template = "qwen_1_5"  # Make sure you use correct chat template for different models
-            question = DEFAULT_IMAGE_TOKEN + data[i]["format_question"]
+            conv_template = "qwen_1_5"  
+            question = DEFAULT_IMAGE_TOKEN + QUESTION_TEMPLATE.format(Question=x['format_question']) + TYPE_TEMPLATE[x['problem_type']]
+            print("QUESTION:",question)
             conv = copy.deepcopy(conv_templates[conv_template])
             conv.append_message(conv.roles[0], question)
             conv.append_message(conv.roles[1], None)
             prompt_question = conv.get_prompt()
 
             input_ids = tokenizer_image_token(prompt_question, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt").unsqueeze(0).to(device)
-            image_sizes = [image_inputs[0].size]
+            image_sizes = [image_inputs.size]
                 
             outputs = model.generate(
                 input_ids,
@@ -165,17 +126,17 @@ for dataset_name in [DATASETNAME]:
             
             batch_output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
             
-            print("==============output================:", batch_output_text[:10])  # 打印前10个输出结果
+            print("==============output================:", batch_output_text)  # 打印前10个输出结果
 
         except Exception as e:
-            print(e,'error:', data[i]['q_id'])
+            print(e,'error:', text_data['q_id'])
             batch_output_text = ['<answer>error</answer>'] * BSZ
 
 
 
         for j, answer in enumerate(batch_output_text):# sample是原始数据集
-            model_output = answer.split('assistant\n\n')[1]
-            sample = data[j + i]
+            model_output = answer
+            sample = data[i]
             result = {}
     
             if(dataset_name == 'MathVista'):

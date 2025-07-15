@@ -3,14 +3,11 @@ from llava.model.builder import load_pretrained_model
 from llava.mm_utils import get_model_name_from_path, process_images, tokenizer_image_token
 from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN, IGNORE_INDEX
 from llava.conversation import conv_templates, SeparatorStyle
-
 from PIL import Image
 import copy
 import torch
-
 import os
 import json
-
 from tqdm import tqdm
 import torch
 from datasets import Dataset
@@ -20,7 +17,23 @@ from llama_tools import get_question_template,get_answer_template
 from PIL import Image
 import warnings
 warnings.filterwarnings("ignore")
+from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
 
+def construct_conv(text_data_batch):
+    
+    batch_prompt_question=[]
+    for data in text_data_batch:
+        question = "<image>" + QUESTION_TEMPLATE.format(Question=data['format_question']) + TYPE_TEMPLATE[data['problem_type']]
+        print("QUESTION:",question)
+        
+        conv_template = "qwen_1_5"  
+        conv = copy.deepcopy(conv_templates[conv_template])
+        conv.append_message(conv.roles[0], question)
+        conv.append_message(conv.roles[1], None)
+        prompt_question = conv.get_prompt()
+        batch_prompt_question.append(prompt_question)
+            
+    return batch_prompt_question
 
 parser = argparse.ArgumentParser(description="Evaluation benchmark")
 parser.add_argument('--model_path', type=str, required=True, help="Path to the model")
@@ -46,10 +59,10 @@ MODEL_NAME = MODEL_PATH.split('/')[-1]  # 输出: "R1-Onevision-7B"
 MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: 
 print("MODEL_NAME",MODEL_NAME)
 
+
 #加载模型
 model_name = "llava_qwen"
 device = "cuda"
-
 device_map = "auto"
 tokenizer, model, image_processor, max_length = load_pretrained_model(MODEL_PATH, None, model_name, device_map=device_map)  # Add any other thing you want to pass in llava_model_args
 
@@ -94,53 +107,56 @@ for dataset_name in [DATASETNAME]:
 
     mean_acc = []
     mean_mra = []
-    
-    for i,(text_data,url) in enumerate(zip(data,all_urls)):
+    for i in tqdm(range(start_idx, len(data), BSZ), desc="Processing batches"):
+    # for i,(text_data,url) in enumerate(zip(data,all_urls)):
+        text_data_batch=data[i:i+BSZ]
+        url_batch = all_urls[i:i+BSZ]
+        
         if(dataset_name == 'MathVista'): 
-            image_inputs = Image.open(url)
+            image_inputs = [Image.open(url) for url in url_batch]   #一个列表
         else:
-            image_inputs = url  #已经处理过的
+            image_inputs = url_batch  #已经处理过的
         
         try:
             #处理图片
-            image_tensor = process_images([image_inputs], image_processor, model.config)
-            image_tensor = [_image.to(dtype=torch.float16, device=device) for _image in image_tensor]
+            batch_image_tensor = process_images(image_inputs, image_processor, model.config)  #既然原本是列表，说明能处理一个列表的图片，这个image_tensor就是列表图片
+            batch_image_tensor = [_image.to(dtype=torch.float16, device=device) for _image in batch_image_tensor]
 
-            conv_template = "qwen_1_5"  # Make sure you use correct chat template for different models
-            # question = DEFAULT_IMAGE_TOKEN +text_data["format_question"]
-            question = DEFAULT_IMAGE_TOKEN + QUESTION_TEMPLATE.format(Question=x['format_question']) + TYPE_TEMPLATE[x['problem_type']]
-            print("QUESTION:",question)
-            conv = copy.deepcopy(conv_templates[conv_template])
-            conv.append_message(conv.roles[0], question)
-            conv.append_message(conv.roles[1], None)
-            prompt_question = conv.get_prompt()
-
-            input_ids = tokenizer_image_token(prompt_question, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt").unsqueeze(0).to(device)
-            image_sizes = [image_inputs.size]
+            batch_prompt_question =construct_conv(text_data_batch)  #一个列表，存储了输入的conv格式的数据
+            
+            #还是只能处理单条数据
+            batch_outputs=[]
+            for index in range(len(url_batch)):
+                prompt_question=batch_prompt_question[index]
+                image = image_inputs[index]
+                image_tensor = batch_image_tensor[index]
                 
-            outputs = model.generate(
-                input_ids,
-                images=image_tensor,
-                image_sizes=image_sizes,
-                do_sample=False,
-                temperature=0,
-                max_new_tokens=4096,
-            )
+                input_ids = tokenizer_image_token(prompt_question, tokenizer, IMAGE_TOKEN_INDEX, return_tensors="pt").unsqueeze(0).to(device)
+                image_sizes = [image.size]
+                    
+                outputs = model.generate(
+                    input_ids,
+                    images=image_tensor,
+                    image_sizes=image_sizes,
+                    do_sample=False,
+                    temperature=0,
+                    max_new_tokens=4096,
+                )
+                batch_outputs.append(outputs)
             
-            
-            batch_output_text = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            batch_output_text = tokenizer.batch_decode(batch_outputs, skip_special_tokens=True)
             
             print("==============output================:", batch_output_text)  # 打印前10个输出结果
 
         except Exception as e:
-            print(e,'error:', text_data['q_id'])
+            print(e,'error:', data[i]['q_id'])
             batch_output_text = ['<answer>error</answer>'] * BSZ
 
 
 
         for j, answer in enumerate(batch_output_text):# sample是原始数据集
             model_output = answer
-            sample = data[i]
+            sample = data[i+j]
             result = {}
     
             if(dataset_name == 'MathVista'):
@@ -178,6 +194,7 @@ for dataset_name in [DATASETNAME]:
         except Exception as e:
             print(f"Error writing to output file: {e}")
 
+
     final_acc={'mean_acc': 0.0, 'mean_mra': 0.0}
     final_acc['mean_acc'] = torch.tensor(mean_acc).mean().item() 
     if mean_mra != []:
@@ -191,3 +208,4 @@ for dataset_name in [DATASETNAME]:
         print(f"Error writing final accuracy to output file: {e}")
     
     print(f"Results saved to {OUTPUT_PATH}")
+    

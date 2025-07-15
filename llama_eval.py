@@ -117,7 +117,7 @@ for dataset_name in [DATASETNAME]:
             image_inputs = [Image.open(img_path) for img_path in batch_urls]
         else:
             image_inputs = batch_urls
-        #（2）处理文本输入
+        #（2）处理文本输入  处理每一个，不是并行
         text_inputs = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in batch_messages]  
         
         try:
