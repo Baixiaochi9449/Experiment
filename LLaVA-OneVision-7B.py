@@ -19,11 +19,31 @@ import warnings
 warnings.filterwarnings("ignore")
 from llama_tools import get_question_template,get_answer_template,get_data_with_templete,Extractor,Conversation
 
+# def construct_conv(text_data_batch):
+#     batch_prompt_question = []
+#     for idx in range(len(text_data_batch["format_question"])):  # 遍历字典的列表值
+#         question = (
+#             "<image>" 
+#             + QUESTION_TEMPLATE.format(Question=text_data_batch["format_question"][idx]) 
+#             + TYPE_TEMPLATE[text_data_batch["problem_type"][idx]]
+#         )
+#         print("QUESTION:",question)
+        
+#         conv_template = "qwen_1_5"  
+#         conv = copy.deepcopy(conv_templates[conv_template])
+#         conv.append_message(conv.roles[0], question)
+#         conv.append_message(conv.roles[1], None)
+#         prompt_question = conv.get_prompt()
+#         batch_prompt_question.append(prompt_question)
+        
+#     return batch_prompt_question
+
 def construct_conv(text_data_batch):
     
     batch_prompt_question=[]
-    for data in text_data_batch:
-        question = "<image>" + QUESTION_TEMPLATE.format(Question=data['format_question']) + TYPE_TEMPLATE[data['problem_type']]
+    for x in tqdm(text_data_batch):
+        question = "<image>" + QUESTION_TEMPLATE.format(Question=x['format_question']) + TYPE_TEMPLATE[x['problem_type']]
+
         print("QUESTION:",question)
         
         conv_template = "qwen_1_5"  
@@ -88,10 +108,17 @@ for dataset_name in [DATASETNAME]:
     make_conversation_cot_image=Conversation.get_conversation_fuchtion(dataset_name) # 获取对话格式模板函数
     data = data.map(make_conversation_cot_image)   #存储了所有用到的数据
 
+    print("Sample data item:", data[0])  # 检查单条数据的结构
+    print("Type of data:", type(data))  # 是否是 Dataset 或 list？
+    print("Slicing test:", type(data[0:2]))  # 切片返回的是列表还是字典？
+    
+    #原本的data不知道是什么格式的
+    
     all_urls=[]
+   
     for x in tqdm(data): # 构造输入数据
-        all_urls.append(x['url']) # 存储所有的url地址   #可能是地址，也可能是已经加载的图片
-        
+        all_urls.append(x['url']) # 存储所有的url地址   #可能是地址，也可能是已经加载的图片       
+
     final_output = []
     start_idx = 0
     if os.path.exists(OUTPUT_PATH):    #上一次没测完的，可以接着续写
@@ -109,8 +136,12 @@ for dataset_name in [DATASETNAME]:
     mean_mra = []
     for i in tqdm(range(start_idx, len(data), BSZ), desc="Processing batches"):
     # for i,(text_data,url) in enumerate(zip(data,all_urls)):
-        text_data_batch=data[i:i+BSZ]
+        # text_data_batch=data[i:i+BSZ]
+        text_data_batch = [data[j] for j in range(i, min(i+BSZ, len(data)))]  #当BSZ>1的时候能运行，但是BSZ=1就变成了一个字典了，所以需要强制转换为列表
         url_batch = all_urls[i:i+BSZ]
+        # print(f"Type of text_data_batch: {type(text_data_batch)}")
+        # print(f"First item type: {type(text_data_batch[0]) if len(text_data_batch) > 0 else 'empty'}")
+        # print(f"Keys in first item: {text_data_batch[0].keys() if isinstance(text_data_batch[0], dict) else 'not dict'}")
         
         if(dataset_name == 'MathVista'): 
             image_inputs = [Image.open(url) for url in url_batch]   #一个列表

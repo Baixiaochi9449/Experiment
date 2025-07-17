@@ -77,16 +77,16 @@ for dataset_name in [DATASETNAME]:
         all_urls.append(x['url']) # 存储所有的url地址   #可能是地址，也可能是已经加载的图片
         
     final_output = []
-    start_idx = 0
-    if os.path.exists(OUTPUT_PATH):    #上一次没测完的，可以接着续写
-        try:
-            with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-                final_output = existing.get("results", [])
-                start_idx = len(final_output)
-                print(f"Resuming from sample index {start_idx}")
-        except Exception as e:
-            print(f"Error reading existing output file: {e}")
+    # start_idx = 0
+    # if os.path.exists(OUTPUT_PATH):    #上一次没测完的，可以接着续写
+    #     try:
+    #         with open(OUTPUT_PATH, "r", encoding="utf-8") as f:
+    #             existing = json.load(f)
+    #             final_output = existing.get("results", [])
+    #             start_idx = len(final_output)
+    #             print(f"Resuming from sample index {start_idx}")
+    #     except Exception as e:
+    #         print(f"Error reading existing output file: {e}")
 
 
     mean_acc = []
@@ -104,7 +104,7 @@ for dataset_name in [DATASETNAME]:
             image_tensor = [_image.to(dtype=torch.float16, device=device) for _image in image_tensor]
 
             conv_template = "qwen_1_5"  
-            question = DEFAULT_IMAGE_TOKEN + QUESTION_TEMPLATE.format(Question=x['format_question']) + TYPE_TEMPLATE[x['problem_type']]
+            question = DEFAULT_IMAGE_TOKEN + QUESTION_TEMPLATE.format(Question=text_data['format_question']) + TYPE_TEMPLATE[text_data['problem_type']]
             print("QUESTION:",question)
             conv = copy.deepcopy(conv_templates[conv_template])
             conv.append_message(conv.roles[0], question)
@@ -134,7 +134,7 @@ for dataset_name in [DATASETNAME]:
 
 
 
-        for j, answer in enumerate(batch_output_text):# sample是原始数据集
+        for answer in batch_output_text:# sample是原始数据集
             model_output = answer
             sample = data[i]
             result = {}
@@ -170,7 +170,8 @@ for dataset_name in [DATASETNAME]:
         try: # 保存结果
             with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
                 json.dump({"results": final_output}, f, indent=2, ensure_ascii=False)
-            print(f"Processed batch {(i - start_idx)//BSZ + 1}, saved {len(final_output)} samples.")
+            # print(f"Processed batch {(i - start_idx)//BSZ + 1}, saved {len(final_output)} samples.")
+            print(f"Processed batch {i + 1}, saved {len(final_output)} samples.")
         except Exception as e:
             print(f"Error writing to output file: {e}")
 

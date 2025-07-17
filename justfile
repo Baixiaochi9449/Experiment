@@ -1,9 +1,9 @@
-Llama-3-VILA1_5-8B_MathVista:
+LlaVa_OneV_mmvu:
     export DECORD_EOF_RETRY_MAX=20480
-    export CUDA_VISIBLE_DEVICES=4
+    export CUDA_VISIBLE_DEVICES=2
     python "/home/gwj/omni-video-r1/luqi/Experiment/qwen_eval.py" \
-        --model_path "/home/gwj/omni-video-r1/luqi/model/Llama-3-VILA1.5-8B" \
-        --dataset "/home/gwj/omni-video-r1/data/eval_data/MathVista->MathVista->testmini" \
+        --model_path "/home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov" \
+        --dataset "/home/gwj/omni-video-r1/data/eval_data/Evaluation/Video-R1-eval/eval_mmvu.json->mmvu->" \
         --cot TA \
         --savepath "/home/gwj/omni-video-r1/luqi/eval_result" \
         --batchsize 64 \
@@ -181,13 +181,36 @@ R1-VL-7B_mmvu:
 
 LLava_onevision_7B_MathVista:
     export DECORD_EOF_RETRY_MAX=20480
-    export CUDA_VISIBLE_DEVICES=7
-    python /home/gwj/omni-video-r1/luqi/Experiment/LLaVA-OneVision-7B.py \
+    export CUDA_VISIBLE_DEVICES=8
+    python /home/gwj/omni-video-r1/luqi/Experiment/LLaVA-OneVision-7B_single.py \
         --model_path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
         --dataset "/home/gwj/omni-video-r1/data/eval_data/MathVista->MathVista->testmini" \
         --cot TA \
         --savepath /home/gwj/omni-video-r1/luqi/eval_result \
         --batchsize 1 \
-        --tips the_second
+        --tips the_Forth
+
+LLava_onevision_7B_ChartQA:
+    export DECORD_EOF_RETRY_MAX=20480
+    export CUDA_VISIBLE_DEVICES=2
+    python /home/gwj/omni-video-r1/luqi/Experiment/LLaVA-OneVision-7B_single.py \
+        --model_path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --dataset "/home/gwj/omni-video-r1/data/eval_data/ChartQA->ChartQA->test" \
+        --cot TA \
+        --savepath /home/gwj/omni-video-r1/luqi/eval_result \
+        --batchsize 1 \
+        --tips the_Third
+
+
+LLava_onevision_7B_MMbench:
+    export DECORD_EOF_RETRY_MAX=20480
+    export CUDA_VISIBLE_DEVICES=4
+    python /home/gwj/omni-video-r1/luqi/Experiment/LLaVA-OneVision-7B_single.py \
+        --model_path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --dataset "/home/gwj/omni-video-r1/data/eval_data/MMBench/en->MMBench->validation" \
+        --cot TA \
+        --savepath /home/gwj/omni-video-r1/luqi/eval_result \
+        --batchsize 1 \
+        --tips the_first
 
 
