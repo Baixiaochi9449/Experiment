@@ -214,3 +214,35 @@ LLava_onevision_7B_MMbench:
         --tips the_first
 
 
+LLava_onevision_7B_videommmu:
+    export CUDA_VISIBLE_DEVICES=3
+    export PYTHONWARNINGS=ignore
+    export TOKENIZERS_PARALLELISM=false
+    python3 /home/gwj/omni-video-r1/luqi/Experiment/video_demo.py \
+        --model-path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --video_path /home/gwj/omni-video-r1/data/eval_data/Evaluation/VideoMMMU \
+        --output_dir /home/gwj/omni-video-r1/luqi/eval_result \
+        --output_name videommmu_third \
+        --dataset_path "/home/gwj/omni-video-r1/data/eval_data/Evaluation/Video-R1-eval/eval_videommmu.json->videommmu"
+
+LLava_onevision_7B_Temcompass:
+    export CUDA_VISIBLE_DEVICES=8
+    export PYTHONWARNINGS=ignore
+    export TOKENIZERS_PARALLELISM=false
+    python3 /home/gwj/omni-video-r1/luqi/Experiment/video_demo.py \
+        --model-path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --video_path /home/gwj/omni-video-r1/data/eval_data/Evaluation/TempCompass \
+        --output_dir /home/gwj/omni-video-r1/luqi/eval_result \
+        --output_name tempcompass_third \
+        --dataset_path "/home/gwj/omni-video-r1/data/eval_data/Evaluation/Video-R1-eval/eval_tempcompass.json->tempcompass"
+
+LLava_onevision_7B_mmvu:
+    export CUDA_VISIBLE_DEVICES=5
+    export PYTHONWARNINGS=ignore
+    export TOKENIZERS_PARALLELISM=false
+    python3 /home/gwj/omni-video-r1/luqi/Experiment/video_demo.py \
+        --model-path /home/gwj/omni-video-r1/eval/model/llava-onevision-qwen2-7b-ov \
+        --video_path /home/gwj/omni-video-r1/data/eval_data/Evaluation/MMVU/videos \
+        --output_dir /home/gwj/omni-video-r1/luqi/eval_result \
+        --output_name mmvu_third \
+        --dataset_path "/home/gwj/omni-video-r1/data/eval_data/Evaluation/Video-R1-eval/eval_mmvu.json->mmvu"

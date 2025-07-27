@@ -302,6 +302,8 @@ class Extractor:
         # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
         pattern2 = r'<answer>\s*Final Answer:\s*(.*?)\s*</answer>'
         pattern3 = r'<answer>\s*(.*?)\s*</answer>'
+        pattern5 = r'<answer>\s*(\S+)\s*$'
+
         # 优先尝试匹配情况2
         match = re.search(pattern4,text,re.DOTALL)
         if match:
@@ -317,6 +319,10 @@ class Extractor:
             return match.group(1).strip()
         
         match = re.search(pattern3, text, re.DOTALL)
+        if match:
+            return match.group(1).strip()
+        
+        match = re.search(pattern5, text, re.DOTALL)
         return match.group(1).strip() if match else ""
 
     def extract_mathvista_answer(dataset,text): # 提取<answer>中间的内容

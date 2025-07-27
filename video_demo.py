@@ -107,6 +107,14 @@ def run_inference(args):
     Args:
         args: Command-line arguments.
     """
+    DATASET = args.dataset_path
+    DATASET_PATH = DATASET.split('->')[0]
+    dataset_name = DATASET.split('->')[1]
+    COT="TA"
+    MODEL_NAME = args.model_path.split('/')[-1]  # 输出: "R1-Onevision-7B"
+    MODEL_NAME = MODEL_NAME.replace("-", "_")  # 输出: "R1_Onevision_7B"
+    print("MODEL_NAME",MODEL_NAME)
+    
     # 1、加载模型
     if "gpt4v" != args.model_path:
         model_name = get_model_name_from_path(args.model_path)
@@ -167,22 +175,26 @@ def run_inference(args):
     all_video_pathes = []
 
     # Check if the video_path is a directory or a file
-    if os.path.isdir(video_path):
-        # If it's a directory, loop over all files in the directory
-        for filename in os.listdir(video_path):
-                    # Load the video file
-            cur_video_path = os.path.join(video_path, f"{filename}")
-            all_video_pathes.append(os.path.join(video_path, cur_video_path))
+    if dataset_name=="mmvu":
+        if os.path.isdir(video_path):
+            # 使用 os.walk 递归遍历所有子目录
+            for root, dirs, files in os.walk(video_path):
+                for filename in files:
+                    if filename.lower().endswith(('.mp4', '.avi', '.mov')):  # 检查是否是视频文件
+                        file_path = os.path.join(root, filename)
+                        all_video_pathes.append(file_path)        
+                        
     else:
-        # If it's a file, just process the video
-        all_video_pathes.append(video_path) 
+        if os.path.isdir(video_path):
+            # If it's a directory, loop over all files in the directory
+            for filename in os.listdir(video_path):
+                if filename.lower().endswith(('.mp4', '.avi', '.mov')):
+                    cur_video_path = os.path.join(video_path, f"{filename}")
+                    all_video_pathes.append(os.path.join(video_path, cur_video_path))
 
     # import pdb;pdb.set_trace()
     #4、加载文本数据
-    DATASET_PATH = args.dataset_path
-    dataset_name = ""
-    COT="TA"
-    MODEL_NAME = "llava-onevision-qwen2-7b-ov"
+
     data = Dataset.from_json(DATASET_PATH)
     
     QUESTION_TEMPLATE=get_question_template(COT,MODEL_NAME) # 获取问题模板
@@ -191,13 +203,7 @@ def run_inference(args):
     print(" TYPE_TEMPLATE", TYPE_TEMPLATE)
     make_conversation_cot_image=Conversation.get_conversation_fuchtion(dataset_name) # 获取对话格式模板函数
     data = data.map(make_conversation_cot_image)
-    # question_list=[]
-    # for x in tqdm(data):
-    #     q = QUESTION_TEMPLATE.format(Question=x['format_question']) + TYPE_TEMPLATE[x['problem_type']]
-    #     question_list.append(q)
-    # print("the question is",question_list[:2])
-    
-    # for video_path,question in zip(all_video_pathes,question_list):
+    #开始处理数据
     mean_acc=[]
     mean_mra=[]
     final_output=[]
@@ -282,11 +288,6 @@ def run_inference(args):
 
         outputs = outputs.strip()
 
-    #     sample_set["pred"] = outputs
-    #     ans_file.write(json.dumps(sample_set, ensure_ascii=False) + "\n")
-    #     ans_file.flush()
-
-    # ans_file.close()
         result = {}
         
         if(dataset_name == 'MathVista'):
@@ -295,7 +296,7 @@ def run_inference(args):
             final_ans = Extractor.extract_answer_special(outputs)
             
         if final_ans == "":
-            final_ans = outputs
+            final_ans = outputs[-1]
         else:   
             if(dataset_name in {'MMBench','tempcompass'}):
                 final_ans = final_ans[0]
