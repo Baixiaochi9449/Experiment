@@ -14,9 +14,13 @@ from datasets import load_dataset, load_from_disk
  
 def get_question_template(COT,MODEL_NAME):
     if COT == 'TA':
-        if MODEL_NAME=='.....':
+        if MODEL_NAME=='R1_Onevision_7B':
             QUESTION_TEMPLATE = (
-                "{Question}  Output the thinking process in <think> </think> and final answer (number) in <answer> </answer> tags."
+                "{Question}\n"
+                "Please think about this question as if you were a human pondering deeply. "
+                "Engage in an internal dialogue using expressions such as 'let me think', 'wait', 'Hmm', 'oh, I see', 'let's break it down', etc, or other natural language thought expressions "
+                "It's encouraged to include self-reflection or verification in the reasoning process. "
+                "Provide your detailed reasoning between the <think> </think> tags, and then give your final answer in the format: Answer: [your answer]"
             )
         if MODEL_NAME=='R1_VL_7B':
             QUESTION_TEMPLATE = """Generate an image description based on the question.
@@ -75,6 +79,14 @@ def get_answer_template(MODEL_NAME):
             "free-form": "",
             "regression": ""
         }
+    if MODEL_NAME == 'R1_Onevision_7B':
+        TYPE_TEMPLATE = {
+            "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) in the format: Answer: [your answer].",
+            "numerical": " Please provide the numerical value (e.g., 42 or 3.14) in the format: Answer: [your answer].",
+            "OCR": " Please transcribe text from the image/video clearly and provide your text answer in the format: Answer: [your answer].",
+            "free-form": " Please provide your text answer in the format: Answer: [your answer].",
+            "regression": " Please provide the numerical value (e.g., 42 or 3.14) in the format: Answer: [your answer]."
+        }
     else:
         TYPE_TEMPLATE = {
             "multiple choice": " Please provide only the single option letter (e.g., A, B, C, D, etc.) within the <answer> </answer> tags.",
@@ -94,8 +106,10 @@ def get_data_with_templete(dataset_name,x,QUESTION_TEMPLATE,TYPE_TEMPLATE):
         image_or_video = x['images'][0]
     elif dataset_name == 'MathVista':
         image_or_video = x['decoded_image']
-    elif dataset_name == 'MMBench' or dataset_name == 'ChartQA':
+    elif dataset_name in{'MMBench','ChartQA','HallusionBench'}:
         image_or_video = x['image']
+    elif dataset_name == 'Video_Hullucer':
+        image_or_video = x['path']
     else:
         image_or_video = '/home/gwj/omni-video-r1/data/eval_data' + x['path'][1:]
     msg = [{
@@ -130,6 +144,8 @@ class Conversation:
             return Conversation.make_conversation_MMStar
         elif dataset_name == 'MMathCoT':
             return Conversation.make_conversation_MMathCoT
+        elif dataset_name == 'HallusionBench':
+            return Conversation.make_conversation_HallusionBench
         else:
             return Conversation.make_conversation_image_and_video
     
@@ -254,7 +270,28 @@ class Conversation:
         
         return msg
 
+    def make_conversation_HallusionBench(example):
+        question = example['question'] + "Options:\n" + "A. Yes\nB. No\n"
+        
+        gt_answer = example['gt_answer']
+        
+        if gt_answer == '1':
+            answer = "A"
+        elif gt_answer == '0':
+            answer = "B"
+        
+        msg ={
+            "solution": "<answer>" + answer + "</answer>",
+            "problem_type": 'multiple choice',
+            "data_type": "image",
+            "format_question": question,
+            "q_id": question,
+            }
+        
+        return msg
+
     def make_conversation_image_and_video(example):
+        
         if example["problem_type"] == 'multiple choice':
             question = example['problem'] + "Options:\n"
             for op in example["options"]:
@@ -296,13 +333,17 @@ class Extractor:
         3.提取<answer>中间的内容
         """
         # 情况1：匹配 Answer: 或 **Answer:**
-       
+        pattern0 = r'answer is ([A-Z])\.'
         pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\*{0,2}\s*)(.*?)(?=\s*(?:\n|</think>|$))'
         pattern4 = r'The final answer is:\s*(.*?)(?=\n\n|$)'
         # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
         pattern2 = r'<answer>\s*Final Answer:\s*(.*?)\s*</answer>'
         pattern3 = r'<answer>\s*(.*?)\s*</answer>'
         pattern5 = r'<answer>\s*(\S+)\s*$'
+
+        match = re.search(pattern0,text,re.DOTALL)
+        if match:
+            return match.group(1).strip()
 
         # 优先尝试匹配情况2
         match = re.search(pattern4,text,re.DOTALL)

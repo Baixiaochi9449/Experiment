@@ -117,8 +117,32 @@ class Conversation:
             return Conversation.make_conversation_ChartQA
         elif dataset_name == 'MMBench':
             return Conversation.make_conversation_MMBench
+        elif dataset_name == 'HallusionBench':
+            return Conversation.make_conversation_HallusionBench
         else:
             return Conversation.make_conversation_image_and_video
+    
+    def make_conversation_HallusionBench(example):
+        image_or_video = example['image']
+        question = example['question'] + "Options:\n" + "A. Yes\nB. No\n"
+        
+        gt_answer = example['gt_answer']
+        
+        if gt_answer == '1':
+            answer = "A"
+        elif gt_answer == '0':
+            answer = "B"
+        
+        msg ={
+            "solution": "<answer>" + answer + "</answer>",
+            "problem_type": 'multiple choice',
+            "data_type": "image",
+            "format_question": question,
+            "q_id": question,
+            "url": image_or_video
+            }
+        
+        return msg
     
     def make_conversation_MathVista(example):
        
@@ -249,6 +273,8 @@ class Extractor:
         返回提取的内容（自动去除首尾空格），若无匹配则返回空字符串。
         3.提取<answer>中间的内容
         """
+        
+        pattern0 = r'Therefore, the answer is ([A-Z])\.'
         # 情况1：匹配 Answer: 或 **Answer:** 或**Answer**:
         pattern1 = r'(?i)(?:\*{0,2}Answer\*{0,2}:\*{0,2}\s*)(.*?)(?=\s*(?:\n|</think>|$))'
         # 情况2：匹配 <answer> Final Answer:xxx </answer>（支持任意字符，非贪婪匹配）
@@ -257,6 +283,10 @@ class Extractor:
         pattern3 = r'<answer>\s*(.*?)\s*</answer>'
         pattern4 = r'<CONCLUSION>\s*(.*?)\s*</CONCLUSION>'
         pattern5 = r'<answer>\s*(\S+)\s*$'
+
+        match = re.search(pattern0, text, re.IGNORECASE)  # 忽略大小写
+        if match:
+            return match.group(1).strip()
 
         # 优先尝试匹配情况2
         match = re.search(pattern2, text, re.IGNORECASE)  # 忽略大小写

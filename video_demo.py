@@ -175,7 +175,7 @@ def run_inference(args):
     all_video_pathes = []
 
     # Check if the video_path is a directory or a file
-    if dataset_name=="mmvu":
+    if dataset_name in {"mmvu","Video_Hullucer"}:
         if os.path.isdir(video_path):
             # 使用 os.walk 递归遍历所有子目录
             for root, dirs, files in os.walk(video_path):
@@ -298,7 +298,7 @@ def run_inference(args):
         if final_ans == "":
             final_ans = outputs[-1]
         else:   
-            if(dataset_name in {'MMBench','tempcompass'}):
+            if(dataset_name in {'MMBench','tempcompass','Video_Hullucer'}):
                 final_ans = final_ans[0]
                 
         q_type = data_text.get("problem_type", "")

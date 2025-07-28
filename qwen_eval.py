@@ -166,9 +166,13 @@ for dataset_name in [DATASETNAME]:
             if final_ans == "":
                 final_ans = model_output
             else:   
-                if(dataset_name in {'MMBench','tempcompass'}):
+                if(dataset_name in {'MMBench','tempcompass','HallusionBench','Video_Hullucer'}):
                     final_ans = final_ans[0]
-                    
+            if(MODEL_NAME == 'R1_Onevision_7B'):
+                # if(dataset_name in {'MMBench','tempcompass','HallusionBench','Video_Hullucer'}):
+                    final_ans = model_output[-1]
+            
+            
             q_type = sample.get("problem_type", "")
             if(dataset_name in {"mmvu","videommmu"} and q_type=="multiple choice"):
                 final_ans = final_ans[0]
