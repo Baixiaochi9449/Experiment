@@ -77,7 +77,7 @@ for dataset_name in [DATASETNAME]:
         data = Dataset.from_json(DATASET_PATH)
     else:
         data = load_dataset(DATASET_PATH)[DATASET_SPLIT_VAL]
-    
+    # print("======================",data.features.keys())
     #1、处理输入的数据 
     QUESTION_TEMPLATE=get_question_template(COT,MODEL_NAME) # 获取问题模板
     TYPE_TEMPLATE = get_answer_template(MODEL_NAME)
@@ -156,7 +156,7 @@ for dataset_name in [DATASETNAME]:
             if final_ans == "":
                 final_ans = model_output
             else:   
-                if(dataset_name in {'MMBench','tempcompass','HallusionBench'}):
+                if(dataset_name in {'MMBench','tempcompass','HallusionBench','POPE'}):
                     final_ans = final_ans[0]
             
             result['question_id'] = sample['q_id']

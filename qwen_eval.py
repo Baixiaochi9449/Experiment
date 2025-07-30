@@ -166,7 +166,7 @@ for dataset_name in [DATASETNAME]:
             if final_ans == "":
                 final_ans = model_output
             else:   
-                if(dataset_name in {'MMBench','tempcompass','HallusionBench','Video_Hullucer'}):
+                if(dataset_name in {'MMBench','tempcompass','HallusionBench','Video_Hullucer','POPE'}):
                     final_ans = final_ans[0]
             if(MODEL_NAME == 'R1_Onevision_7B'):
                 # if(dataset_name in {'MMBench','tempcompass','HallusionBench','Video_Hullucer'}):

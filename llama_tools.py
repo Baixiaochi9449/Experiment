@@ -119,6 +119,8 @@ class Conversation:
             return Conversation.make_conversation_MMBench
         elif dataset_name == 'HallusionBench':
             return Conversation.make_conversation_HallusionBench
+        elif dataset_name == 'POPE':
+            return Conversation.make_conversation_POPE
         else:
             return Conversation.make_conversation_image_and_video
     
@@ -230,6 +232,26 @@ class Conversation:
         
         return msg
 
+    def make_conversation_POPE(example):
+        image_or_video = example['image']
+        question = example['question'] + "Options:\n" + "A. yes\nB. no\n"
+        ans = example['answer']
+        
+        if ans == 'yes':
+            answer = 'A'
+        else:
+            answer = 'B'  
+
+        msg = {
+            "solution": "<answer>" + answer + "</answer>",
+            "problem_type": 'multiple choice',
+            "data_type": "image",
+            "format_question": question,
+            "q_id": example['id'],
+            "url": image_or_video
+        }
+        
+        return msg
 
     def make_conversation_image_and_video(example):
         image_or_video = '/home/gwj/omni-video-r1/data/eval_data' + example['path'][1:]

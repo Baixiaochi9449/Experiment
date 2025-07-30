@@ -106,7 +106,7 @@ def get_data_with_templete(dataset_name,x,QUESTION_TEMPLATE,TYPE_TEMPLATE):
         image_or_video = x['images'][0]
     elif dataset_name == 'MathVista':
         image_or_video = x['decoded_image']
-    elif dataset_name in{'MMBench','ChartQA','HallusionBench'}:
+    elif dataset_name in{'MMBench','ChartQA','HallusionBench','POPE'}:
         image_or_video = x['image']
     elif dataset_name == 'Video_Hullucer':
         image_or_video = x['path']
@@ -146,6 +146,8 @@ class Conversation:
             return Conversation.make_conversation_MMathCoT
         elif dataset_name == 'HallusionBench':
             return Conversation.make_conversation_HallusionBench
+        elif dataset_name == 'POPE':
+            return Conversation.make_conversation_POPE
         else:
             return Conversation.make_conversation_image_and_video
     
@@ -289,6 +291,41 @@ class Conversation:
             }
         
         return msg
+    
+    def make_conversation_POPE(example):
+        question = example['question'] + "Options:\n" + "A. yes\nB. no\n"
+        ans = example['answer']
+        
+        if ans == 'yes':
+            answer = 'A'
+        else:
+            answer = 'B'  
+
+        msg = {
+            "solution": "<answer>" + answer + "</answer>",
+            "problem_type": 'multiple choice',
+            "data_type": "image",
+            "format_question": question,
+            "q_id": example['id']
+        }
+        
+        return msg
+
+    # def make_conversation_image_and_video(example):
+        
+    #     if example["problem_type"] == 'multiple choice':
+    #         question = example['problem'] + "Options:\n"
+    #         for op in example["options"]:
+    #             question += op + "\n"
+    #     else:
+    #         question = example['problem']
+        
+    #     msg ={
+    #         "format_question":question,
+    #         "q_id": example['problem_id'],
+    #         "image": '/home/gwj/omni-video-r1/data/eval_data' + example['path'][1:],
+    #         }
+    #     return msg
 
     def make_conversation_image_and_video(example):
         
@@ -302,7 +339,7 @@ class Conversation:
         msg ={
             "format_question":question,
             "q_id": example['problem_id'],
-            "image": '/home/gwj/omni-video-r1/data/eval_data' + example['path'][1:],
+            "image": example['path'],
             }
         
         return msg

@@ -169,29 +169,28 @@ def run_inference(args):
     OUTPUT_PATH = os.path.join(args.output_dir, f"{output_name}.json")
     
 
-    #3、处理视频路径
-    video_path = args.video_path  #video的文件夹，应该不可以是很多个的那种
+    # #3、处理视频路径
+    # video_path = args.video_path  #video的文件夹，应该不可以是很多个的那种
 
-    all_video_pathes = []
+    # all_video_pathes = []
 
-    # Check if the video_path is a directory or a file
-    if dataset_name in {"mmvu","Video_Hullucer"}:
-        if os.path.isdir(video_path):
-            # 使用 os.walk 递归遍历所有子目录
-            for root, dirs, files in os.walk(video_path):
-                for filename in files:
-                    if filename.lower().endswith(('.mp4', '.avi', '.mov')):  # 检查是否是视频文件
-                        file_path = os.path.join(root, filename)
-                        all_video_pathes.append(file_path)        
-                        
-    else:
-        if os.path.isdir(video_path):
-            # If it's a directory, loop over all files in the directory
-            for filename in os.listdir(video_path):
-                if filename.lower().endswith(('.mp4', '.avi', '.mov')):
-                    cur_video_path = os.path.join(video_path, f"{filename}")
-                    all_video_pathes.append(os.path.join(video_path, cur_video_path))
-
+    # # Check if the video_path is a directory or a file
+    # if dataset_name in {"mmvu","Video_Hullucer"}:
+    #     if os.path.isdir(video_path):
+    #         # 使用 os.walk 递归遍历所有子目录
+    #         for root, dirs, files in os.walk(video_path):
+    #             for filename in files:
+    #                 if filename.lower().endswith(('.mp4', '.avi', '.mov')):  # 检查是否是视频文件
+    #                     file_path = os.path.join(root, filename)
+    #                     all_video_pathes.append(file_path)        
+    
+    # else:
+    #     if os.path.isdir(video_path):
+    #         # If it's a directory, loop over all files in the directory
+    #         for filename in os.listdir(video_path):
+    #             if filename.lower().endswith(('.mp4', '.avi', '.mov')):
+    #                 cur_video_path = os.path.join(video_path, f"{filename}")
+    #                 all_video_pathes.append(os.path.join(video_path, cur_video_path))
     # import pdb;pdb.set_trace()
     #4、加载文本数据
 
@@ -207,13 +206,16 @@ def run_inference(args):
     mean_acc=[]
     mean_mra=[]
     final_output=[]
-    for i,video_path in enumerate(all_video_pathes):
-        data_text = data[i]
+    for i,data_text in enumerate(data):
+        # data_text = data[i]
+        video_path = data_text['image']
+        if( dataset_name =="Video_Hullucer"):
+            video_path = video_path.replace("/home/gwj/omni-video-r1/data/eval_datahome/", "/home/")
         sample_set = {}
         question = QUESTION_TEMPLATE.format(Question=data_text['format_question']) + TYPE_TEMPLATE[data_text['problem_type']]
         sample_set["Q"] = data_text['format_question']
         sample_set["video_name"] = video_path
-        
+        print("==========Processing video:========", video_path)
 
         # Check if the video exists
         if os.path.exists(video_path):

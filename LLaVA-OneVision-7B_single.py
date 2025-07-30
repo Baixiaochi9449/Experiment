@@ -147,7 +147,7 @@ for dataset_name in [DATASETNAME]:
             if final_ans == "":
                 final_ans = model_output
             else:   
-                if(dataset_name=='MMBench'):
+                if(dataset_name in {'MMBench','POPE'}):
                     final_ans = final_ans[0]
             
             result['question_id'] = sample['q_id']
